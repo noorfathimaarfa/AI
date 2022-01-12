@@ -1,50 +1,92 @@
-def clean(floor,row,col):
-    i,j,p,q=row,col,len(floor),len(floor[0])
-    Right=Down=True
-    cleaned=[not any(fl)for fl in floor]
-    while not all(cleaned):
-        while any(floor[i]):
-            print_floor(floor,i,j)
-            if floor[i][j]:
-                floor[i][j]=0
-                print_floor(floor,i,j)
-            if not any(floor[i]):
-                cleaned[i]=True
-                break
-            if j==q-1:
-                j-=1
-                Right=False
-            elif j==0:
-                j+=1
-                Right=True
-            else:
-                j+=1 if Right else -1
-        if all(cleaned):
-            break
-        if i==p-1:
-            i-=1
-            Down=False
-        elif i==0:
-            i+=1
-            Down=True
-        else:
-            i+=1 if Down else -1
-        if cleaned[i]:
-            print_floor(floor,i,j)
-                
+combinations = [(True, True, True),
+                (True, True, False),
+                (True, False, True),
+                (True, False, False),
+                (False, True, True),
+                (False, True, False),
+                (False, False,True),
+                (False, False, False)]
+variable = {'p':0, 'q':1, 'r':2}
+priority = {'v':1, '^':2, '~':3}
 
+# set of rules
+kb = '' # should be a cnf
+q =  '' # should be a cnf
+def isOperand(c):
+  return c.isalpha() and c != 'v'
 
-def print_floor(floor,row,col):
-    for m in range(len(floor)):
-        for n in range(len(floor[m])):
-                       if m==row and n==col:
-                           print(f">{floor[m][n]}<",end=' ')
-                       else:
-                           print(f"{floor[m][n]}",end='  ')
-        print(end='\n')
-    print(end='\n')
+def isLeftParenthesis(c):
+  return c == "("
 
-floor=[[1,0,0,0],
-        [0,1,0,1],
-        [1,0,1,1]]
-clean(floor,1,2)
+def isRightParenthesis(c):
+  return c == ")"
+
+def isEmpty(stack):
+  return len(stack) == 0
+
+def peek(stack):
+  return stack[-1]
+
+def hasLessOrEqualPriority(c1, c2):
+  try: return priority[c1] <= priority[c2]
+  except KeyError: return False
+def toPostfix(infix):
+  stack = []
+  postfix = ''
+  for c in infix:
+    if isOperand(c):
+      postfix += c
+    else:
+      if isLeftParenthesis(c):
+        stack.append(c)
+      elif isRightParenthesis(c):
+        operator = stack.pop()
+        while not isLeftParenthesis(operator):
+          postfix += operator
+          operator = stack.pop()
+      else:
+        while (not isEmpty(stack)) and hasLessOrEqualPriority(c, peek(stack)):
+          postfix += stack.pop()
+        stack.append(c)
+  while (not isEmpty(stack)):
+    postfix += stack.pop()
+  return postfix
+def _eval(i, val1, val2):
+    if i == '^': return val2 and val1
+    return val2 or val1
+    
+def evaluatePostfix(exp, comb):
+  stack = []
+  for i in exp:
+    if isOperand(i):
+      stack.append(comb[variable[i]])
+    elif i == '~':
+      val1 = stack.pop()
+      stack.append(not val1)
+    else:
+      val1 = stack.pop()
+      val2 = stack.pop()
+      stack.append(_eval(i, val2, val1))
+  return stack.pop()
+def input_rules():
+  global kb, q
+  kb = input("Enter Rule :")
+  q = input("Enter Query : ")
+
+def entailment():
+  global kb, q
+  print('*' * 10 + "Truth Table Reference" + "*" * 10)
+  print("kb", "alpha")
+  print("*" * 10)
+  for comb in combinations:
+    s = evaluatePostfix(toPostfix(kb), comb)
+    f = evaluatePostfix(toPostfix(q), comb)
+    print(s, f)
+    print("-" * 10)
+    if s and not f:
+      return False
+  return True
+input_rules()
+ans = entailment()
+if ans: print("The Knowledge Base Entails Query")
+else: print("The Knowledge Base Doesn't Entail Query")
