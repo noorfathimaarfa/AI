@@ -1,100 +1,87 @@
 import re
+def getPredicates(string):
+    expr = '[a-z~]+\([A-Za-z,]+\)'
+    return re.findall(expr, string)
 
-def getAttributes(expr):
-    expr = expr.split("(")[1:]
-    expr = "(".join(expr)
-    expr = expr[:-1]
-    expr = re.split("(?<!\(.),(?!.\))", expr)
-    return expr
-def getInitialPredicate(expr):
-    return expr.split("(")[0]
+def getAttributes(string):
+    expr = '\([^)]+\)'
+    matches = re.findall(expr, string)
+    return [m for m in str(matches) if m.isalpha()]
+def DeMorgan(sentence):
+    string = ''.join(list(sentence).copy())
+    string = string.replace('~~','')
+    flag = '[' in string
+    string = string.replace('~[','')
+    string = string.strip(']')
+    for predicate in getPredicates(string):
+        string = string.replace(predicate, f'~{predicate}')
+    s = list(string)
+    for i, c in enumerate(string):
+        if c == '|':
+            s[i] = '&'
+        elif c == '&':
+            s[i] = '|'
+    string = ''.join(s)    
+    string = string.replace('~~','')
+    return f'[{string}]' if flag else string
+def Skolemization(sentence):
+    SKOLEM_CONSTANTS = [f'{chr(c)}' for c in range(ord('A'), ord('Z')+1)]
+    statement = ''.join(list(sentence).copy())
+    matches = re.findall('[∀∃].', statement)
+    for match in matches[::-1]:
+        statement = statement.replace(match, '')
+        statements = re.findall('\[\[[^]]+\]]', statement)
+        for s in statements:
+            statement = statement.replace(s, s[1:-1])
+        for predicate in getPredicates(statement):
+            attributes = getAttributes(predicate)
+            if ''.join(attributes).islower():
+                statement = statement.replace(match[1],SKOLEM_CONSTANTS.pop(0))
+            else:
+                aU = [a for a in attributes if not a.islower()][0]
+                statement = statement.replace(aU, f'{SKOLEM_CONSTANTS.pop(0)}({match[1]})')
+    return statement
+def fol_to_cnf(fol):
+    statement = fol.replace("<=>", "_")
+    while '_' in statement:
+        i = statement.index('_')
+        new_statement = '[' + statement[:i] + '=>' + statement[i+1:] + ']&['+ statement[i+1:] + '=>' + statement[:i] + ']'
+        statement = new_statement
+    statement = statement.replace("=>", "-")
+    expr = '\[([^]]+)\]'
+    statements = re.findall(expr, statement)
+    for i, s in enumerate(statements):
+        if '[' in s and ']' not in s:
+            statements[i] += ']'
+    for s in statements:
+        statement = statement.replace(s, fol_to_cnf(s))
+    while '-' in statement:
+        i = statement.index('-')
+        br = statement.index('[') if '[' in statement else 0
+        new_statement = '~' + statement[br:i] + '|' + statement[i+1:]
+        statement = statement[:br] + new_statement if br > 0 else new_statement
+    while '~∀' in statement:
+        i = statement.index('~∀')
+        statement = list(statement)
+        statement[i], statement[i+1], statement[i+2] = '∃', statement[i+2], '~'
+        statement = ''.join(statement)
+    while '~∃' in statement:
+        i = statement.index('~∃')
+        s = list(statement)
+        s[i], s[i+1], s[i+2] = '∀', s[i+2], '~'
+        statement = ''.join(s)
+    statement = statement.replace('~[∀','[~∀')
+    statement = statement.replace('~[∃','[~∃')
+    expr = '(~[∀|∃].)'
+    statements = re.findall(expr, statement)
+    for s in statements:
+        statement = statement.replace(s, fol_to_cnf(s))
+    expr = '~\[[^]]+\]'
+    statements = re.findall(expr, statement)
+    for s in statements:
+        statement = statement.replace(s, DeMorgan(s))
+    return statement
+def main():
+    statement = input("Enter FOL statement: ")
 
-def isConstant(char):
-    return char.isupper() and len(char) == 1
-
-def isVariable(char):
-    return char.islower() and len(char) == 1
-
-def replaceAttributes(expr, old, new):
-    attr = getAttributes(expr)
-    for index, val in enumerate(attr):
-        if val == old:
-            attr[index] = new
-    predicate = getInitialPredicate(expr)
-    return predicate + "(" + ",".join(attr) + ")"
-
-def apply(expr, subs):
-    for sub in subs:
-        new, old = sub  #substitution is a tuple of 2 values (new, old)
-        expr = replaceAttributes(expr, old, new)
-    return expr
-def checkOccurs(var, expr):
-    if expr.find(var) == -1:
-        return False
-    return True
-
-def getFirstPart(expr):
-    attr = getAttributes(expr)
-    return attr[0]
-
-def getRemainingPart(expr):
-    predicate = getInitialPredicate(expr)
-    attr = getAttributes(expr)
-    newExpr = predicate + "(" + ",".join(attr[1:]) + ")"
-    return newExpr
-def unify(exp1, exp2):
-   if exp1 == exp2:
-        return []
-
-    if isConstant(exp1) and isConstant(exp2):
-        if exp1 != exp2:
-            return False
-
-    if isConstant(exp1):
-        return [(exp1, exp2)]
-
-    if isConstant(exp2):
-        return [(exp2, exp1)]
-
-    if isVariable(exp1):
-        if checkOccurs(exp1, exp2):
-            return False
-        else:
-            return [(exp2, exp1)]
-
-    if isVariable(exp2):
-        if checkOccurs(exp2, exp1):
-            return False
-        else:
-            return [(exp1, exp2)]
-
-    if getInitialPredicate(exp1) != getInitialPredicate(exp2):
-        print("Predicates do not match. Cannot be unified")
-        return False
-
-    attributeCount1 = len(getAttributes(exp1))
-    attributeCount2 = len(getAttributes(exp2))
-    if attributeCount1 != attributeCount2:
-        return False
-
-    head1 = getFirstPart(exp1)
-    head2 = getFirstPart(exp2)
-    initialSub = unify(head1, head2)
-    if not initialSub:
-        return False
-    if attributeCount1 == 1:
-        return initialSub
-
-    tail1 = getRemainingPart(exp1)
-    tail2 = getRemainingPart(exp2)
-
-    if initialSub != []:
-        tail1 = apply(tail1, initialSub)
-        tail2 = apply(tail2, initialSub)
-
-    remainingSub = unify(tail1, tail2)
-    if not remainingSub:
-        return False
-
-    initialSub.extend(remainingSub)
-    return initialSub
+    print(f"FOL converted to CNF: {Skolemization(fol_to_cnf(statement))}")
