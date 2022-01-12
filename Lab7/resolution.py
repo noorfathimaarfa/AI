@@ -1,50 +1,43 @@
-def clean(floor,row,col):
-    i,j,p,q=row,col,len(floor),len(floor[0])
-    Right=Down=True
-    cleaned=[not any(fl)for fl in floor]
-    while not all(cleaned):
-        while any(floor[i]):
-            print_floor(floor,i,j)
-            if floor[i][j]:
-                floor[i][j]=0
-                print_floor(floor,i,j)
-            if not any(floor[i]):
-                cleaned[i]=True
+def disjunctify(clauses):
+    disjuncts = []
+    for clause in clauses:
+        disjuncts.append(tuple(clause.split('v')))
+    return disjuncts
+def getResolvant(ci, cj, di, dj):
+    resolvant = list(ci) + list(cj)
+    resolvant.remove(di)
+    resolvant.remove(dj)
+    return tuple(resolvant)
+def resolve(ci, cj):
+    for di in ci:
+        for dj in cj:
+            if di == '~' + dj or dj == '~' + di:
+                return getResolvant(ci, cj, di, dj)
+def checkResolution(clauses, query):
+    clauses += [query if query.startswith('~') else '~' + query]
+    proposition = '^'.join(['(' + clause + ')' for clause in clauses])
+    print(f'Trying to prove {proposition} by contradiction....')
+    
+    clauses = disjunctify(clauses)
+    resolved = False
+    new = set()
+    
+    while not resolved:
+        n = len(clauses)
+        pairs = [(clauses[i], clauses[j]) for i in range(n) for j in range(i + 1, n)]
+        for (ci, cj) in pairs:
+            resolvant = resolve(ci, cj)
+            if not resolvant:
+                resolved = True
                 break
-            if j==q-1:
-                j-=1
-                Right=False
-            elif j==0:
-                j+=1
-                Right=True
-            else:
-                j+=1 if Right else -1
-        if all(cleaned):
+            new = new.union(set(resolvents))
+        if new.issubset(set(clauses)):
             break
-        if i==p-1:
-            i-=1
-            Down=False
-        elif i==0:
-            i+=1
-            Down=True
-        else:
-            i+=1 if Down else -1
-        if cleaned[i]:
-            print_floor(floor,i,j)
-                
-
-
-def print_floor(floor,row,col):
-    for m in range(len(floor)):
-        for n in range(len(floor[m])):
-                       if m==row and n==col:
-                           print(f">{floor[m][n]}<",end=' ')
-                       else:
-                           print(f"{floor[m][n]}",end='  ')
-        print(end='\n')
-    print(end='\n')
-
-floor=[[1,0,0,0],
-        [0,1,0,1],
-        [1,0,1,1]]
-clean(floor,1,2)
+        for clause in new:
+            if clause not in clauses:
+                clauses.append(clause)
+        
+    if resolved:
+        print('Contradiction failed, Knowledge Base entails the query, proved by resolution')
+    else:
+        print("Contradiction succeeded, Knowledge Base doesn't entail the query, no empty set produced after resolution")
